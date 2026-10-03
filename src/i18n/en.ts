@@ -302,5 +302,8 @@ const en = {
   'stats.note': 'The game only sends the milestones you reach (first sketchbook, stage 2…) and a playtime range, to help balance it. No cookies, no personal data.',
   'stats.off': 'Stop sending statistics',
   'stats.on': 'Send statistics again',
+  'community.title': 'Community',
+  'community.note': 'Share your drawings, report a bug or follow the updates on the Discord server.',
+  'community.discord': 'Join the Discord',
 };
 export default en;

@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import * as E from '../engine/game';
-import { RULES, RULE_IDS, MACHINES, MACHINE_IDS, FLIPS, FLIP_IDS, FOLIO_N, MAX_CUSTOM, ATELIER_COST, TECHS, FX_IDS, INKS, InkId } from '../engine/data';
+import { RULES, RULE_IDS, MACHINES, MACHINE_IDS, FLIPS, FLIP_IDS, FOLIO_N, MAX_CUSTOM, ATELIER_COST, TECHS, FX_IDS, INKS, InkId, DISCORD_URL } from '../engine/data';
 import { HARMO_RATIOS, filNails } from '../engine/geometry';
 import { LANGS, Lang } from '../i18n';
 import { analyticsConfigured } from '../analytics';
@@ -168,6 +168,10 @@ function SettingsPanel() {
       <option value="auto">{t('lang.auto')}</option>
       {LANGS.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
     </select>
+
+    <h3 className="sub">{t('community.title')}</h3>
+    <p className="note">{t('community.note')}</p>
+    <a className="link" href={DISCORD_URL} target="_blank" rel="noopener noreferrer">{t('community.discord')}</a>
 
     {analyticsConfigured() && <>
       <h3 className="sub">{t('stats.title')}</h3>

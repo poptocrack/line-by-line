@@ -38,6 +38,8 @@ export type Param = [string, number, number, number, number];
 export const ENABLE_MACHINES = false;
 /** Atelier (motifs personnalisés) : mis de côté aussi. */
 export const ENABLE_ATELIER = false;
+/** Serveur Discord du jeu (Réglages > Communauté). Invitation permanente. */
+export const DISCORD_URL = 'https://discord.gg/47MtAeYax3';
 
 export const MACHINES: Record<MachineId, { need: number; mult: number; params: Param[] }> = {
   fil: { need: 1, mult: 1.3, params: [['N', 60, 240, 6, 150], ['k', 2, 119, 1, 61], ['k2', 0, 119, 1, 37]] },

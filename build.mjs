@@ -1,6 +1,6 @@
 // Construit un seul fichier HTML autonome (dist/index.html) : CSS et JS inclus en ligne.
 import { build, context } from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync } from 'fs';
 
 const watch = process.argv.includes('--watch');
 const opts = {
@@ -17,6 +17,8 @@ function emit(result) {
     .replace('<!--SCRIPT-->', () => `<script>${js.replace(/<\/script/gi, '<\\/script')}</script>`);
   mkdirSync('dist', { recursive: true });
   writeFileSync('dist/index.html', html);
+  // Fichiers servis tels quels à côté du jeu (ex. vérification incrementaldb).
+  if (existsSync('public')) cpSync('public', 'dist', { recursive: true });
   console.log(`dist/index.html (${(html.length / 1024).toFixed(0)} ko)`);
 }
 if (watch) {

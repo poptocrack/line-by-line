@@ -302,5 +302,8 @@ const fr = {
   'stats.note': 'Le jeu envoie seulement les étapes atteintes (premier carnet, étape 2…) et une tranche de temps de jeu, pour aider à l’équilibrer. Sans cookies, sans aucune donnée personnelle.',
   'stats.off': 'Ne plus envoyer de statistiques',
   'stats.on': 'Réactiver les statistiques',
+  'community.title': 'Communauté',
+  'community.note': 'Partage tes dessins, signale un bug ou suis les mises à jour sur le serveur Discord.',
+  'community.discord': 'Rejoindre le Discord',
 };
 export default fr;

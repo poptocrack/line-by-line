@@ -28,6 +28,9 @@ statistiques dans les Réglages. Code : `src/analytics.ts`.
 
 Les polices sont intégrées au fichier (paquets @fontsource, `src/fonts.css`) : aucune requête vers Google Fonts.
 
+Le dossier `public/` est copié tel quel dans `dist/` au build (ex. `incrementaldb.txt`, preuve de propriété pour incrementaldb).
+Lien Discord des Réglages (section Communauté) : `DISCORD_URL` dans `src/engine/data.ts`.
+
 ## Commandes
 
 ```bash
