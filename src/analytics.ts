@@ -14,6 +14,8 @@ const allowed = () => !!CODE && !E.S.noStats && (navigator as any).doNotTrack !=
 function send(path: string, title: string, event = true) {
   if (!allowed()) return;
   const q = new URLSearchParams({ p: path, t: title, e: event ? 'true' : 'false', rnd: Math.random().toString(36).slice(2) });
+  // Provenance : GoatCounter ne la lit que dans le paramètre r (l'en-tête Referer du fetch est la page du jeu elle-même).
+  if (!event && document.referrer) q.set('r', document.referrer);
   try { fetch(`https://${CODE}.goatcounter.com/count?${q}`, { mode: 'no-cors', keepalive: true, credentials: 'omit' }); } catch (_) { }
 }
 
