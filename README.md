@@ -92,13 +92,16 @@ Améliorations (`UPGRADES`) : sans niveau max (sauf le Projecteur), coût du niv
 
 ## Étape 2 : Fascination (prototype)
 
-- Déclencheur : l'amélioration « Fascination » apparaît après 10 films (`fascVisible` dans `game.ts`). Elle coûte tout le graphite et prévient avant de basculer.
+- Déclencheur : l'amélioration « Fascination » apparaît après 10 films et au moins un carnet fermé (`fascVisible` dans `game.ts`). Elle coûte `FASC_PAGES` pages (1000, `src/engine/data.ts`), payées à l'entrée de l'étape 2, explique qu'on ne revient pas en arrière et prévient avant de basculer.
 - La bascule (`App.tsx` + styles `.bascule`) : le crayon s'emballe (`setFrenzy`), l'interface tombe, le tapis se tord, puis le noir.
 - `src/stage2/illusions.ts` : les illusions (Necker, Kanizsa, Hermann, Fraser, Rubin, moiré), valeurs et coûts.
 - `src/stage2/stage2.ts` : fascination, présence, intrusions, rituels, absence, révélations, yeux, son et rendu. État sauvegardé dans `S.s2`.
 - `src/ui/Stage2.tsx` : l'interface écrite dans les marges.
-- La boucle : terminer le dessin final propose « Fermer le carnet » (`newCycle` dans `game.ts`). L'étape 1 recommence de zéro au petit matin, avec revenus ×2 par nuit traversée (×2, ×4, ×8…), et l'étape 2 suivante est plus dure (+25 % de présence par nuit). Conservés : réglages, langue, effets visuels, nuits et trophées (le dessin final encadré dans la galerie).
-- Outils de test : « Montrer Fascination » dans le panneau de test ; en étape 2 avec `#dev` : +20 présence, +1000 fascination, retour à l'étape 1.
+- La boucle : terminer le dessin final propose « Fermer le carnet » (`newCycle` dans `game.ts`). Le carnet se ferme comme à l'étape 1 (ses pages sont gagnées, voir `nextSketchbook`), avec en plus revenus ×2 par nuit traversée (×2, ×4, ×8…) et un trophée. Pages, techniques, folioscope et films sont conservés. L'étape 2 suivante est plus dure (+25 % de présence par nuit).
+- Transe : chaque illusion terminée sans s'arrêter ajoute +25 % de gains (jusqu'à ×3, `TRANCE_STEP`, `TRANCE_MAX`). Le répit (3 s sans tracer soi-même) fait redescendre la présence mais remet la transe à zéro. Le rituel apaise sans casser la transe.
+- Main étrangère : ses traits passent par une file à part (`rt.hq`) et ne comptent pas comme les tiens. Elle continue pendant le répit, qui reste possible, mais ses illusions ne font pas monter la transe.
+- Défaite : 15 % du dessin révélé est effacé, tout le reste de la nuit repart de zéro, coût du rituel compris.
+- Outils de test : « Montrer Fascination (+ pages) » dans le panneau de test (donne les pages manquantes) ; en étape 2 avec `#dev` : +20 présence, +1000 fascination, retour à l'étape 1.
 
 ## Ajouter une langue
 

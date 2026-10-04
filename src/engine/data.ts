@@ -111,3 +111,6 @@ export const PAPERS = [
   { id: 'blue', bg: '#dde6ef', ink: '26,38,74' },
   { id: 'black', bg: '#25262a', ink: '238,238,232', dark: true },
 ];
+
+/** Prix de « Fascination » (passage à l'étape 2), en pages à dépenser. */
+export const FASC_PAGES = 1000;

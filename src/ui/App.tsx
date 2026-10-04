@@ -5,6 +5,7 @@ import { TopBar, MotifList, Stats, Upgrades, Stage, Gallery, flyQueue, Panel } f
 import { Drawer } from './Panels';
 import Stage2 from './Stage2';
 import * as S2 from '../stage2/stage2';
+import { FASC_PAGES } from '../engine/data';
 
 export default function App() {
   useGame();
@@ -91,20 +92,21 @@ export default function App() {
   );
 }
 
-/** « Fascination » : coûte tout le graphite, prévient avant de basculer. */
+/** « Fascination » : coûte des pages, dit ce qu'elle fait et prévient avant de basculer. */
 function FascinationRow(props: { onGo: () => void }) {
   const { S, t, fmt } = E;
   const [armed, setArmed] = useState(false);
   const d = Math.min(3, S.fascIgnored || 0);
-  const can = S.g.gt(0);
+  const can = E.fascCanPay();
   return (
     <div className="up fasc">
       <div><span className="name">{t('fasc.name')}</span></div>
       <p className="eff">{t('fasc.d' + d)}</p>
+      <p className="fasc-what">{t('fasc.what')}{!can && ' ' + t('fasc.avail', { av: fmt(E.pagesAvail()), n: fmt(FASC_PAGES) })}</p>
       <button type="button" className={'buy' + (can ? ' can' : '')} disabled={!can} onClick={() => { if (!armed) { setArmed(true); return; } props.onGo(); }}>
-        {armed ? t('fasc.confirm') : t('up.cost', { c: fmt(S.g) })}
+        {armed ? t('fasc.confirm') : t('fasc.cost', { n: fmt(FASC_PAGES) })}
       </button>
-      {armed && <p className="fasc-warn" role="alert">{t('fasc.warn')}</p>}
+      {armed && <p className="fasc-warn" role="alert">{t('fasc.warn', { n: fmt(FASC_PAGES) })}</p>}
     </div>
   );
 }

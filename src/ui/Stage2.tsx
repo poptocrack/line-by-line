@@ -42,6 +42,7 @@ export default function Stage2(props: { dev: boolean; onCloseBook: () => void })
       <div className="s2-count">
         <span className="n">{fmt(s.F)}</span> {t('s2.unit')}
         <div className="s2-prox">{t('s2.prox', { m: fmt(S2.proximity(), 2) })}</div>
+        {(s.streak || 0) > 0 && <div className="s2-trance">{t('s2.trance', { m: fmt(S2.trance(), 2) })}</div>}
         <div className="s2-final">{t('s2.final', { p: fmt(S2.finalPct(), 1) })}</div>
         {rt.resting && <div className="s2-rest">{t('s2.rest')}</div>}
         {s.visions > 0 && <div className="s2-visions">{t('s2.visions', { n: s.visions })}</div>}
@@ -94,6 +95,7 @@ export default function Stage2(props: { dev: boolean; onCloseBook: () => void })
         <div className="s2-end">
           <p>{t('s2.end1')}</p><p className="red">{t('s2.end2')}</p>
           <p className="bonus">{t('s2.endBonus', { m: fmt(E.cycleMult() * 2) })}</p>
+          <p className="bonus">{t('s2.endKeep', { n: fmt(E.pagesFor(E.S.total)) })}</p>
           <div className="end-actions"><button type="button" onClick={props.onCloseBook}>{t('s2.endClose')}</button>
           <button type="button" className="quiet" onClick={S2.stayAfterEnd}>{t('s2.endStay')}</button></div>
         </div>

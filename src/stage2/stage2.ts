@@ -12,7 +12,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 
 /* ======================= État sauvegardé ======================= */
 export const fresh = (visions = 0, notes = [], final = 0, ended = false) => ({
-  F: 0, total: 0, presence: 0, final, ended, up: { main: 0, oeil: 0, veille: 0 }, rituals: 0,
+  F: 0, total: 0, presence: 0, final, ended, up: { main: 0, oeil: 0, veille: 0 }, rituals: 0, streak: 0,
   unl: { necker: 1 }, sel: 'necker', done: 0, visions, notes, calm: false, lastSeen: Date.now(),
 });
 export const st = () => S.s2;
@@ -25,6 +25,7 @@ export const UP2 = [
 export const up2Cost = u => Math.ceil(u.base * Math.pow(u.gr, st().up[u.id]));
 export const ritualCost = () => Math.ceil(25 * Math.pow(1.3, st().rituals));
 // Rien ne trace tout seul : l'automatisme ne vient que de la Main étrangère (qui rapproche la présence).
+// Elle continue pendant le répit : la présence redescend moins vite, mais les heures continuent de tomber.
 export const handRateAt = l => 2.5 * l;
 export const handPresAt = l => .06 * l;
 export const eyeMultAt = l => 1 + .5 * l;
@@ -37,10 +38,13 @@ export const STROKE_SHARE = .4;
 const presencePerSec = () => handPresAt(st().up.main);
 /** Plus il est proche, plus ça rapporte : ×1 à 0 de présence, ×3 à 90. */
 export const proximity = () => 1 + 2 * Math.min(st().presence, 90) / 90;
-export const gainMult = () => eyeMultAt(st().up.oeil) * proximity(); // les visions ne rapportent plus rien : perdre ne doit pas être rentable
-/** Répit : sans tracer pendant REST_DELAY s, la présence redescend. La Main étrangère, qui trace sans arrêt, l'empêche. */
+/** Transe : chaque illusion terminée sans s'arrêter ajoute +25 % (jusqu'à ×3). Le répit la fait retomber à zéro. */
+export const TRANCE_STEP = .25, TRANCE_MAX = 8;
+export const trance = () => 1 + TRANCE_STEP * Math.min(st().streak || 0, TRANCE_MAX);
+export const gainMult = () => eyeMultAt(st().up.oeil) * proximity() * trance(); // les visions ne rapportent plus rien : perdre ne doit pas être rentable
+/** Répit : sans tracer soi-même pendant REST_DELAY s, la présence redescend, mais la transe retombe. */
 export const REST_DELAY = 3, REST_RATE = 1.5;
-/** Rituel : temps de recharge, et coût qui ne repart pas à zéro après une défaite. */
+/** Rituel : temps de recharge. Le coût monte à chaque rituel et repart à zéro après une défaite. */
 export const RITUAL_COOLDOWN = 20;
 /** Défaite : part du dessin déjà révélé qui est effacée. */
 export const LOSS_ERASE = .15;
@@ -52,7 +56,7 @@ export const nightHarshness = () => 1 + .25 * (S.cycles || 0);
 /* ======================= Exécution (non sauvegardée) ======================= */
 export const rt = {
   cv: null, g: null, W: 0, H: 0, dpr: 1, m: null, t: 0, mouse: [0, 0],
-  sheet: null, queue: 0, reveal: null, ritual: null, eyes: [], foreign: [], foreignT: 4,
+  sheet: null, queue: 0, hq: 0, reveal: null, ritual: null, eyes: [], foreign: [], foreignT: 4,
   lossT: 0, absence: 0, saveT: 0, running: false, floats: [], endT: 0, endShown: false,
   ghostFade: 0, ghostAcc: 0, ghostClearT: 0, pendF: 0, pendT: 0, pendXY: [0, 0], idleT: 0, resting: false, ritualCd: 0,
 };
@@ -66,6 +70,7 @@ function checkNotes() {
   const s = st();
   note('tuto1');
   if (s.done >= 1 && s.presence > 0) note('tuto2');
+  if ((s.streak || 0) >= 3) note('trance');
   if (s.F >= ritualCost()) note('tuto3');
   if (s.presence >= 30) note('tuto4');
   if (s.presence >= 75) note('hand');
@@ -128,10 +133,13 @@ function tick(dt) {
   if (rt.absence > 0) rt.absence -= dt;
   if (rt.lossT > 0) { rt.lossT += dt; if (rt.lossT > 4.5) resetRun(); return; }
   // La présence monte toute seule ; un rituel la fait reculer
-  rt.idleT += dt; if (rt.ritualCd > 0) rt.ritualCd -= dt;
-  rt.resting = !rt.ritual && !rt.reveal && rt.idleT >= REST_DELAY && s.presence > 0;
+  // Le temps de la révélation et du rituel ne compte pas comme un arrêt
+  if (!rt.reveal && !rt.ritual) rt.idleT += dt; if (rt.ritualCd > 0) rt.ritualCd -= dt;
+  const stopped = !rt.ritual && !rt.reveal && rt.idleT >= REST_DELAY;
+  if (stopped) s.streak = 0;
+  rt.resting = stopped && s.presence > 0;
   if (rt.resting) note('rest');
-  s.presence = Math.max(0, Math.min(100, s.presence + (rt.ritual ? -rt.ritual.rate : rt.resting ? -REST_RATE : presencePerSec()) * dt));
+  s.presence = Math.max(0, Math.min(100, s.presence + ((rt.ritual ? -rt.ritual.rate : rt.resting ? -REST_RATE : 0) + presencePerSec()) * dt));
   for (const f of rt.floats) f.t += dt; rt.floats = rt.floats.filter(f => f.t < 1.6);
   // Les petits gains des traits s'affichent regroupés, près du dernier trait
   rt.pendT -= dt; if (rt.pendT <= 0 && rt.pendF > 0) { rt.pendT = .25; if (rt.floats.length < 30) rt.floats.push({ text: '+' + E.fmt(rt.pendF, rt.pendF < 10 ? 1 : 0), x: rt.pendXY[0], y: rt.pendXY[1], t: 0, col: '236,226,214', small: true }); rt.pendF = 0; }
@@ -148,15 +156,15 @@ function tick(dt) {
   // Rituel : une étoile de l'étape 1, tracée en graphite, qui apaise
   if (rt.ritual) { const r = rt.ritual; r.acc += dt * 14; while (r.acc >= 1 && r.idx < r.strokes.length) { r.acc -= 1; r.idx++; } if (r.idx >= r.strokes.length) { r.fade += dt; if (r.fade > 1) rt.ritual = null; } return; }
   if (rt.reveal) { rt.reveal.t += dt; if (rt.reveal.t >= rt.reveal.dur) endReveal(); return; }
-  // Tracé
-  rt.queue = Math.min(30, rt.queue + autoRate() * dt);
+  // Tracé : tes clics d'abord, puis ceux de la Main étrangère (qui ne comptent pas comme toi)
+  rt.hq = Math.min(30, rt.hq + autoRate() * dt);
   const sh = rt.sheet; let budget = dt, guard = 0;
   while (budget > 0 && guard++ < 200) {
     const sk = sh.strokes[sh.idx];
-    if (sh.u === 0) { if (rt.queue < 1) break; rt.queue -= 1; sh.u = 1e-6; }
+    if (sh.u === 0) { if (rt.queue >= 1) { rt.queue -= 1; rt.idleT = 0; } else if (rt.hq >= 1) rt.hq -= 1; else break; sh.u = 1e-6; }
     const dur = .22 * (.4 + .6 * Math.min(slen(sk), 2) / 2) / vigilAt(s.up.veille), need = (1 - sh.u) * dur;
     if (budget >= need) {
-      budget -= need; drawStroke(ic, sk, 1); sh.idx++; sh.u = 0; strokeSound(); rt.idleT = 0;
+      budget -= need; drawStroke(ic, sk, 1); sh.idx++; sh.u = 0; strokeSound();
       // Chaque trait rapporte un peu, tout de suite
       const d = def(sh.id), v = d.base * gainMult() * STROKE_SHARE / sh.strokes.length;
       s.F += v; s.total += v; rt.pendF += v; const e = ptAt(sk, 1); rt.pendXY = [X(e[0]), Y(e[1])];
@@ -167,7 +175,7 @@ function tick(dt) {
 }
 function complete() {
   const s = st(), d = def(rt.sheet.id), gain = d.base * gainMult(), pres = (d.presence + eyePresAt(s.up.oeil)) * nightHarshness();
-  s.F += gain; s.total += gain; s.done++;
+  s.F += gain; s.total += gain; s.done++; if (rt.idleT < REST_DELAY) s.streak = (s.streak || 0) + 1; // la Main seule ne compte pas
   s.presence = Math.min(100, s.presence + pres);
   s.final = Math.min(FINAL_UNITS, s.final + d.reveal);
   rt.floats.push({ text: '+' + E.fmt(gain), x: rt.m.cx, y: rt.m.cy - rt.m.S * .55, t: 0, col: '236,226,214' });
@@ -207,16 +215,17 @@ function spawnForeign() {
 function startLoss() { rt.lossT = .001; boom(); }
 function resetRun() {
   const s = st(), v = s.visions + 1, notes = [...s.notes];
-  // Il efface une partie du dessin ; le coût du rituel, lui, ne repart pas à zéro
+  // Il efface une partie du dessin. Tout le reste repart de zéro, coût du rituel compris
   const final = s.ended ? s.final : s.final * (1 - LOSS_ERASE);
-  S.s2 = fresh(v, notes, final, s.ended); S.s2.calm = s.calm; S.s2.rituals = s.rituals; note(v === 1 ? 'vision1' : 'vision2'); note('rest'); // la défaite apprend le répit
-  rt.lossT = 0; rt.eyes = []; rt.foreign = []; rt.reveal = null; rt.ritual = null; rt.queue = 0; rt.ritualCd = 0; rt.idleT = 0;
+  S.s2 = fresh(v, notes, final, s.ended); S.s2.calm = s.calm; note(v === 1 ? 'vision1' : 'vision2'); note('rest'); // la défaite apprend le répit
+  rt.lossT = 0; rt.eyes = []; rt.foreign = []; rt.reveal = null; rt.ritual = null; rt.queue = 0; rt.hq = 0; rt.ritualCd = 0; rt.idleT = 0;
   gc.clearRect(0, 0, rt.W, rt.H); newSheet(); E.save();
 }
 function absence(sec) {
   const s = st();
   s.presence = Math.min(95, s.presence + Math.min(35, sec / 60 * 6));
   // Il a dessiné pendant ton absence
+  s.streak = 0;
   for (let i = 0; i < 5; i++) spawnForeign();
   spawnEyes(2); note('absence'); rt.absence = 4.5;
 }
@@ -405,7 +414,7 @@ function boom() {
 
 /* ======================= Entrée et sortie ======================= */
 export function enterStage2() {
-  S.stage = 2; S.g = E.D(0); S.s2 = fresh(0, ['enter']);
+  E.payFascination(); S.stage = 2; S.s2 = fresh(0, ['enter']);
   E.setFrenzy(false); E.save();
 }
 /** Outil de test : revenir à l'étape 1 (recharge la page). */

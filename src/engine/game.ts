@@ -2,7 +2,7 @@
 // Moteur du jeu : état, économie, rendu canvas, son et boucle. Aucune dépendance à React :
 // l'interface s'abonne au store (subscribe/getVersion) et appelle les actions exportées.
 import { L, A, units, ptAt, TAU, PATTERN_GEN, MACHINE_GEN, FLIP_FRAME, RULE_GEN, filNails } from './geometry';
-import { DETAIL_GEO_CAP, FINISH_FX_CAP, BALANCE, FLIP_GEO_CAP, FLIP_MASTERY_MAX, ENABLE_ATELIER, MASTERY, TECHS, ENABLE_MACHINES, PATTERNS, MACHINES, MACHINE_IDS, FLIPS, FLIP_IDS, FOLIO_N, FOLIO_NEED_PATTERN, RULES, MAX_CUSTOM, ATELIER_COST, UPGRADES, TECHS, FX_IDS, INKS, PAPERS } from './data';
+import { DETAIL_GEO_CAP, FINISH_FX_CAP, BALANCE, FLIP_GEO_CAP, FLIP_MASTERY_MAX, ENABLE_ATELIER, MASTERY, TECHS, ENABLE_MACHINES, PATTERNS, MACHINES, MACHINE_IDS, FLIPS, FLIP_IDS, FOLIO_N, FOLIO_NEED_PATTERN, RULES, MAX_CUSTOM, ATELIER_COST, UPGRADES, TECHS, FX_IDS, INKS, PAPERS, FASC_PAGES } from './data';
 import { detectLang, makeT, makeFmt } from '../i18n';
 import Decimal from 'break_eternity.js';
 
@@ -780,16 +780,22 @@ export const filmFrames = (k, m = 0) => Array.from({ length: FOLIO_N }, (_, i) =
 export function playFolio(k) { if (proj || S.folio[k] < 2) return; audio(); startProjection(k, S.folio[k], 2); }
 
 /* Carnet */
-export function closeCarnet() {
-  const add = pagesFor(S.total); if (add < 1) return; audio();
-  if (fascVisible()) S.fascIgnored = (S.fascIgnored || 0) + 1;
-  const before = gm(), keptGal = S.galleryValue.mul(archivesShare(techLevel('archives')));
+/** Nouveau carnet : la partie recommence (graphite, motifs, améliorations, galerie) et les pages gagnées s'ajoutent.
+ *  Gardés : pages, techniques, folioscope et films, atelier, réglages. Renvoie le nombre de pages ajoutées. */
+function nextSketchbook() {
+  const add = pagesFor(S.total), keptGal = S.galleryValue.mul(archivesShare(techLevel('archives')));
   S.pages += add; S.carnets++;
   Object.assign(S, { g: D(0), total: D(0), drawings: 0, galleryValue: keptGal, unl: PATTERNS.map((_, i) => i ? 0 : 1), up: { ...UPDEF }, gal: [], sheet: null });
   applyTech(); if (typeof S.sel === 'number') S.sel = 0;
   S.g = fondsAmount(techLevel('fonds'));
   queue = 0; rate = D(0); swapT = 0;
   applyPaper(); resetEasels(); newSheet();
+  return add;
+}
+export function closeCarnet() {
+  if (pagesFor(S.total) < 1) return; audio();
+  if (fascVisible()) S.fascIgnored = (S.fascIgnored || 0) + 1;
+  const before = gm(), add = nextSketchbook();
   tone([523, 659, 784, 1047, 1319], .1, .1, .9);
   hooks.toast(t('toast.prestige', { n: add, paper: t('paper.' + PAPER.id), a: fmt(before, 1), b: fmt(gm(), 1) }));
   afterChange();
@@ -817,14 +823,12 @@ export function setVolume(k, v) { S.vol[k] = v; audio(); applyVolumes(); bump();
 export function toggleStats() { S.noStats = !S.noStats; afterChange(); }
 export function toggleMute() { S.muted = !S.muted; audio(); applyVolumes(); afterChange(); }
 export function markSeen(panel) { if (panel === 'machines') S.seenMach = MACHINE_IDS.filter(machUnlocked).length; if (panel === 'folio' && folioUnlocked()) S.seenFolio = 1; afterChange(); }
-/** Fin de l'étape 2 : on ferme le carnet. L'étape 1 recommence de zéro, avec le bonus de nuit doublé.
- *  Conservés : réglages, langue, effets visuels débloqués, nuits traversées et trophées. */
+/** Fin de l'étape 2 : on ferme le carnet, comme à l'étape 1 (ses pages sont gagnées), et la nuit double tous les revenus.
+ *  Tout ce qu'un carnet garde est gardé, plus les nuits traversées et les trophées. */
 export function newCycle() {
-  const keep = { vol: S.vol, muted: S.muted, lang: S.lang, fx: S.fx, ink: S.ink, fxOff: S.fxOff, buyMax: S.buyMax, cycles: (S.cycles || 0) + 1, trophies: (S.trophies || 0) + 1, playTime: S.playTime, tracked: S.tracked, noStats: S.noStats };
-  for (const k of Object.keys(S)) delete S[k];
-  Object.assign(S, defaults(), keep); normalize();
-  queue = 0; rate = D(0); swapT = 0; proj = null; frenzy = false;
-  applyPaper(); resetEasels(); newSheet(); afterChange();
+  Object.assign(S, { stage: 1, s2: null, fascForce: 0, fascIgnored: 0, cycles: (S.cycles || 0) + 1, trophies: (S.trophies || 0) + 1 });
+  proj = null; frenzy = false;
+  nextSketchbook(); afterChange();
 }
 export function resetAll() {
   try { localStorage.removeItem(KEY); } catch (_) { }
@@ -838,11 +842,15 @@ export function resetAll() {
 /* Outils de test */
 export function devGraphite() { gain(Decimal.max(1e4, S.g.mul(99))); rateAcc = D(0); afterChange(); }
 export function devCarnet() { S.carnets++; applyPaper(); afterChange(); }
-export function devFascination() { S.fascForce = 1; afterChange(); }
+/** Montre Fascination et donne les pages qui manquent pour la payer. */
+export function devFascination() { S.fascForce = 1; S.pages += Math.max(0, FASC_PAGES - pagesAvail()); afterChange(); }
 
 /* ======================= Vers l'étape 2 ======================= */
-/** « Fascination » apparaît tard (10 films terminés), et coûte toujours tout le graphite. */
-export const fascVisible = () => S.stage !== 2 && ((S.films || 0) >= 10 || !!S.fascForce);
+/** « Fascination » apparaît tard (10 films terminés et au moins un carnet fermé) et coûte FASC_PAGES pages. */
+export const fascVisible = () => S.stage !== 2 && (((S.films || 0) >= 10 && (S.carnets || 0) >= 1) || !!S.fascForce);
+export const fascCanPay = () => pagesAvail() >= FASC_PAGES;
+/** Payée à l'entrée de l'étape 2 (après la bascule), pour qu'un rechargement pendant l'animation ne coûte rien. */
+export function payFascination() { S.pagesSpent = (S.pagesSpent || 0) + FASC_PAGES; }
 let frenzy = false;
 export function setFrenzy(on) { frenzy = on; }
 
