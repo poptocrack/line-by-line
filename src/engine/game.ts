@@ -86,8 +86,9 @@ export const paper = () => PAPER;
 export const gm = () => gmWith(0);
 /** Multiplicateur de revenus avec `extra` pages de plus (aperçu avant de fermer le carnet). */
 export const gmWith = extra => (1 + 0.1 * (S.pages + extra) + 0.15 * (S.films || 0)) * Math.pow(1.15, S.tech.reliure || 0) * cycleMult();
-/** Nuits traversées : chaque dessin final terminé double tous les revenus de l'étape 1 (×2, ×4, ×8…). */
-export const cycleMult = () => Math.pow(2, S.cycles || 0);
+/** Nuits traversées : chaque dessin final terminé triple tous les revenus de l'étape 1 (×3, ×9, ×27…). */
+export const NIGHT_MULT = 3;
+export const cycleMult = () => Math.pow(NIGHT_MULT, S.cycles || 0);
 export const bestMult = () => Math.max(...PATTERNS.map((p, i) => S.unl[i] ? p.mult : 1));
 export const customMult = () => bestMult() * 1.5;
 export const perClick = () => 1 + S.up.hand;
@@ -668,8 +669,9 @@ function frame(now) {
 function tickFrame(now) {
   const dt = Math.max(0, Math.min(.1, (now - last) / 1000)); last = now;
   if (!document.hidden) S.playTime = (S.playTime || 0) + dt; // temps de jeu réel (statistiques)
-  // Étape 2 : l'étape 1 est figée (l'étape 2 a sa propre boucle)
-  if (S.stage === 2) { if (pg) pg.clearRect(0, 0, innerWidth, innerHeight); silenceDraw(); return; }
+  // Étape 2 : l'étape 1 ne dessine plus (l'étape 2 a sa propre boucle), mais la galerie et les trophées continuent de
+  // rapporter. Ce graphite compte dans le total du carnet, donc dans les pages gagnées à la fin de la nuit.
+  if (S.stage === 2) { if (pg) pg.clearRect(0, 0, innerWidth, innerHeight); silenceDraw(); const pr = passive(); if (pr.gt(0)) gain(pr.mul(dt)); return; }
   step(dt); fadeGlow(dt); renderSheet(); renderPencil(dt); drawSound(dt);
   const ne = easelCount(); for (let i = 0; i < ne; i++) if (easels[i]) { stepEasel(easels[i], dt); renderEasel(easels[i]); }
   uiT += dt; if (uiT > .1) { uiT = 0; checkFx(); bump(); }

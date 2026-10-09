@@ -1,64 +1,80 @@
 // @ts-nocheck
 // Étape 2 : « Fascination ». Tout est dessiné sur une feuille noire qui occupe l'écran.
-// Ressources : la fascination (monnaie) et la présence (0 à 100). À 100, « il » finit le dessin et la partie recommence,
-// en ne gardant que les visions. Aucune mécanique ne dépend du regard du joueur : tout passe par le temps et ses choix.
+// Trois notions : les heures (monnaie), la présence (0 à 100) et le dessin final, qu'on dévoile morceau par morceau avec les heures.
+// Rien ne se perd : à 100 de présence, « il » prend ta main un moment, dessine très vite et rapporte beaucoup, puis lâche.
 import * as E from '../engine/game';
-import { ptAt, slen, TAU, PATTERN_GEN } from '../engine/geometry';
-import { ILLUSIONS, NECKER_FACES, HERMANN_POS, RUBIN_PROFILE, MOIRE_RINGS, FINAL_UNITS, finalDrawing } from './illusions';
+import { ptAt, slen, TAU } from '../engine/geometry';
+import { ILLUSIONS, NECKER_FACES, HERMANN_POS, RUBIN_PROFILE, MOIRE_RINGS, finalDrawing } from './illusions';
 const FINAL = finalDrawing();
 
 const S = E.S;
 const rnd = (a, b) => a + Math.random() * (b - a);
 
+/* ======================= Nuits suivantes ======================= */
+// Chaque nuit traversée rend la suivante plus courte : la Main étrangère commence plus haut et le dessin coûte deux fois moins.
+export const nightsDone = () => S.cycles || 0;
+export const startHand = () => Math.min(10, 2 * nightsDone());
+export const pieceDiscount = () => Math.pow(2, nightsDone());
+
+/* ======================= Le dessin final ======================= */
+/** Le dessin se dévoile en PIECES morceaux, achetés avec les heures : PIECE_BASE × PIECE_GR^i (÷ la remise des nuits). */
+export const PIECES = 10, PIECE_BASE = 200, PIECE_GR = 3.2;
+export const pieceCost = () => Math.ceil(PIECE_BASE * Math.pow(PIECE_GR, st().pieces) / pieceDiscount());
+
 /* ======================= État sauvegardé ======================= */
-export const fresh = (visions = 0, notes = [], final = 0, ended = false) => ({
-  F: 0, total: 0, presence: 0, final, ended, up: { main: 0, oeil: 0, veille: 0 }, rituals: 0, streak: 0,
-  unl: { necker: 1 }, sel: 'necker', done: 0, visions, notes, calm: false, lastSeen: Date.now(),
+export const fresh = (notes = []) => ({
+  F: 0, total: 0, presence: 0, pieces: 0, ended: false, up: { main: startHand(), oeil: 0, veille: 0, memoire: 0 },
+  unl: { necker: 1 }, sel: 'necker', done: 0, takes: 0, notes, calm: false, lastSeen: Date.now(),
 });
 export const st = () => S.s2;
+/** Anciennes sauvegardes (défaite, rituel, transe) : on garde la progression et on retire le reste. */
+function normalizeS2() {
+  const s = st();
+  s.up = { main: 0, oeil: 0, veille: 0, memoire: 0, ...s.up };
+  s.takes = s.takes || 0;
+  // L'ancien dessin se dévoilait en 230 unités : on le convertit en morceaux, sans rien perdre de ce qui était acquis
+  if (s.pieces == null) s.pieces = s.ended ? PIECES : Math.min(PIECES - 1, Math.floor((s.final || 0) / 230 * PIECES));
+  delete s.final; delete s.visions; delete s.rituals; delete s.streak;
+}
 
 export const UP2 = [
-  { id: 'main', base: 20, gr: 2.2 },   // la main étrangère dessine avec toi
-  { id: 'oeil', base: 50, gr: 2.6 },   // chaque illusion fascine plus, et nourrit la présence
-  { id: 'veille', base: 15, gr: 2.0 }, // tu traces plus vite
+  { id: 'main', base: 20, gr: 2.2 },    // la main étrangère dessine avec toi
+  { id: 'oeil', base: 50, gr: 2.6 },    // chaque illusion rapporte plus, et le rapproche
+  { id: 'veille', base: 15, gr: 2.0 },  // tu traces plus vite
+  { id: 'memoire', base: 40, gr: 2.4 }, // quand il prend ta main, c'est plus long et plus fort
 ];
 export const up2Cost = u => Math.ceil(u.base * Math.pow(u.gr, st().up[u.id]));
-export const ritualCost = () => Math.ceil(25 * Math.pow(1.3, st().rituals));
-// Rien ne trace tout seul : l'automatisme ne vient que de la Main étrangère (qui rapproche la présence).
-// Elle continue pendant le répit : la présence redescend moins vite, mais les heures continuent de tomber.
+// Toutes les marques aident : la présence qui monte n'est plus une menace, elle rapproche la prochaine prise de main.
 export const handRateAt = l => 2.5 * l;
-export const handPresAt = l => .06 * l;
+export const handPresAt = l => .08 * l;
 export const eyeMultAt = l => 1 + .5 * l;
-export const eyePresAt = l => 2 * l;
 export const vigilAt = l => 1 / Math.pow(.8, l);
+export const takeDurAt = l => TAKE_DUR + 2 * Math.min(l, 9);
+export const takeMultAt = l => 1.5 + .25 * l;
 const autoRate = () => handRateAt(st().up.main);
 /** Part des heures versée trait par trait (le reste tombe à la fin de l'illusion). */
 export const STROKE_SHARE = .4;
-// La présence ne monte qu'avec les illusions terminées, et toute seule seulement si la Main étrangère dessine.
 const presencePerSec = () => handPresAt(st().up.main);
 /** Plus il est proche, plus ça rapporte : ×1 à 0 de présence, ×3 à 90. */
 export const proximity = () => 1 + 2 * Math.min(st().presence, 90) / 90;
-/** Transe : chaque illusion terminée sans s'arrêter ajoute +25 % (jusqu'à ×3). Le répit la fait retomber à zéro. */
-export const TRANCE_STEP = .25, TRANCE_MAX = 8;
-export const trance = () => 1 + TRANCE_STEP * Math.min(st().streak || 0, TRANCE_MAX);
-export const gainMult = () => eyeMultAt(st().up.oeil) * proximity() * trance(); // les visions ne rapportent plus rien : perdre ne doit pas être rentable
-/** Répit : sans tracer soi-même pendant REST_DELAY s, la présence redescend, mais la transe retombe. */
-export const REST_DELAY = 3, REST_RATE = 1.5;
-/** Rituel : temps de recharge. Le coût monte à chaque rituel et repart à zéro après une défaite. */
-export const RITUAL_COOLDOWN = 20;
-/** Défaite : part du dessin déjà révélé qui est effacée. */
-export const LOSS_ERASE = .15;
-export const finalPct = () => Math.min(100, st().final / FINAL_UNITS * 100);
-export const RITUAL_CALM = 30;
-/** Chaque nuit traversée rend la suivante plus dure : +25 % de présence par illusion. */
-export const nightHarshness = () => 1 + .25 * (S.cycles || 0);
+/** Prise de main : TAKE_DUR s de base, il trace TAKE_RATE traits/s en plus. */
+export const TAKE_DUR = 12, TAKE_RATE = 6;
+export const taking = () => !!rt.take;
+export const takeLeft = () => rt.take ? Math.max(0, rt.take.dur - rt.take.t) : 0;
+/** Pendant la prise de main, le bonus de Mémoire s'ajoute à la proximité (qui retombe avec la présence). */
+export const gainMult = () => eyeMultAt(st().up.oeil) * proximity() * (rt.take ? takeMultAt(st().up.memoire) : 1);
+export const finalPct = () => Math.min(100, st().pieces / PIECES * 100);
+/** Durée de la révélation jouée après chaque illusion (raccourcie pendant la prise de main). */
+const REVEAL_DUR = 2.6, REVEAL_DUR_TAKE = .7;
+/** Absence : la Main étrangère continue à moitié de son rythme, 8 h au plus. */
+const AWAY_SHARE = .5, AWAY_MAX = 8 * 3600;
 
 /* ======================= Exécution (non sauvegardée) ======================= */
 export const rt = {
   cv: null, g: null, W: 0, H: 0, dpr: 1, m: null, t: 0, mouse: [0, 0],
-  sheet: null, queue: 0, hq: 0, reveal: null, ritual: null, eyes: [], foreign: [], foreignT: 4,
-  lossT: 0, absence: 0, saveT: 0, running: false, floats: [], endT: 0, endShown: false,
-  ghostFade: 0, ghostAcc: 0, ghostClearT: 0, pendF: 0, pendT: 0, pendXY: [0, 0], idleT: 0, resting: false, ritualCd: 0,
+  sheet: null, queue: 0, hq: 0, reveal: null, take: null, shown: null, eyes: [], foreign: [], foreignT: 4,
+  absence: 0, away: null, saveT: 0, running: false, floats: [], endT: 0, endShown: false,
+  ghostFade: 0, ghostAcc: 0, ghostClearT: 0, pendF: 0, pendT: 0, pendXY: [0, 0],
 };
 const ink = document.createElement('canvas'), ic = ink.getContext('2d');
 const ghost = document.createElement('canvas'), gc = ghost.getContext('2d');
@@ -70,10 +86,10 @@ function checkNotes() {
   const s = st();
   note('tuto1');
   if (s.done >= 1 && s.presence > 0) note('tuto2');
-  if ((s.streak || 0) >= 3) note('trance');
-  if (s.F >= ritualCost()) note('tuto3');
+  if (s.F >= up2Cost(UP2[0])) note('tuto3');
   if (s.presence >= 30) note('tuto4');
   if (s.presence >= 75) note('hand');
+  if (s.takes >= 1) note('take');
   if (s.done >= 1) note('cube');
   if (s.done >= 3) note('points');
   if (s.done >= 20) note('copy');
@@ -86,6 +102,7 @@ function checkNotes() {
 
 /* ======================= Canvas ======================= */
 export function attach(cv) {
+  normalizeS2();
   rt.cv = cv; rt.g = cv.getContext('2d'); resize();
   addEventListener('resize', resize);
   const s = st();
@@ -131,37 +148,37 @@ function tick(dt) {
   rt.saveT += dt; if (rt.saveT > 4) { rt.saveT = 0; E.save(); }
   updateAudio(dt);
   if (rt.absence > 0) rt.absence -= dt;
-  if (rt.lossT > 0) { rt.lossT += dt; if (rt.lossT > 4.5) resetRun(); return; }
-  // La présence monte toute seule ; un rituel la fait reculer
-  // Le temps de la révélation et du rituel ne compte pas comme un arrêt
-  if (!rt.reveal && !rt.ritual) rt.idleT += dt; if (rt.ritualCd > 0) rt.ritualCd -= dt;
-  const stopped = !rt.ritual && !rt.reveal && rt.idleT >= REST_DELAY;
-  if (stopped) s.streak = 0;
-  rt.resting = stopped && s.presence > 0;
-  if (rt.resting) note('rest');
-  s.presence = Math.max(0, Math.min(100, s.presence + ((rt.ritual ? -rt.ritual.rate : rt.resting ? -REST_RATE : 0) + presencePerSec()) * dt));
+  // Le morceau acheté se dessine en 1,5 s (au chargement, ce qui est déjà acquis apparaît d'un coup)
+  const target = finalPct() / 100 * FINAL.length;
+  rt.shown = rt.shown == null ? target : Math.min(target, rt.shown + dt * FINAL.length / PIECES / 1.5);
+  // Présence : elle monte avec les illusions et la Main étrangère. Pendant la prise de main, elle redescend jusqu'à zéro.
+  if (rt.take) {
+    rt.take.t += dt; s.presence = Math.max(0, 100 * (1 - rt.take.t / rt.take.dur));
+    if (rt.take.t >= rt.take.dur) endTake();
+  } else {
+    s.presence = Math.min(100, s.presence + presencePerSec() * dt);
+    if (s.presence >= 100) startTake();
+  }
   for (const f of rt.floats) f.t += dt; rt.floats = rt.floats.filter(f => f.t < 1.6);
   // Les petits gains des traits s'affichent regroupés, près du dernier trait
   rt.pendT -= dt; if (rt.pendT <= 0 && rt.pendF > 0) { rt.pendT = .25; if (rt.floats.length < 30) rt.floats.push({ text: '+' + E.fmt(rt.pendF, rt.pendF < 10 ? 1 : 0), x: rt.pendXY[0], y: rt.pendXY[1], t: 0, col: '236,226,214', small: true }); rt.pendF = 0; }
   fadeGhosts(dt);
   if (rt.endT > 0) rt.endT += dt;
-  if (s.presence >= 100) { startLoss(); return; }
   checkNotes();
-  // Intrusions
-  if (s.presence >= 25) { rt.foreignT -= dt * (1 + s.presence / 40); if (rt.foreignT <= 0) { rt.foreignT = rnd(4, 9); spawnForeign(); } }
+  // Intrusions : de simples traits rouges, plus fréquents quand il est proche
+  const p = intensity();
+  if (p >= .25) { rt.foreignT -= dt * (1 + p * 2.5) * (rt.take ? 3 : 1); if (rt.foreignT <= 0) { rt.foreignT = rnd(4, 9); spawnForeign(); } }
   for (const f of rt.foreign) f.t += dt;
   for (const f of rt.foreign.filter(f => f.t >= f.dur)) { gc.save(); gc.strokeStyle = 'rgba(210,25,35,.75)'; gc.lineWidth = rt.m.lw; gc.beginPath(); gc.moveTo(X(f.x1), Y(f.y1)); gc.lineTo(X(f.x2), Y(f.y2)); gc.stroke(); gc.restore(); }
   rt.foreign = rt.foreign.filter(f => f.t < f.dur);
   for (const e of rt.eyes) { e.blink -= dt; if (e.blink < -.18) e.blink = rnd(2.5, 7); }
-  // Rituel : une étoile de l'étape 1, tracée en graphite, qui apaise
-  if (rt.ritual) { const r = rt.ritual; r.acc += dt * 14; while (r.acc >= 1 && r.idx < r.strokes.length) { r.acc -= 1; r.idx++; } if (r.idx >= r.strokes.length) { r.fade += dt; if (r.fade > 1) rt.ritual = null; } return; }
   if (rt.reveal) { rt.reveal.t += dt; if (rt.reveal.t >= rt.reveal.dur) endReveal(); return; }
-  // Tracé : tes clics d'abord, puis ceux de la Main étrangère (qui ne comptent pas comme toi)
-  rt.hq = Math.min(30, rt.hq + autoRate() * dt);
+  // Tracé : tes clics d'abord, puis la Main étrangère (et lui, quand il tient ta main)
+  rt.hq = Math.min(30, rt.hq + (autoRate() + (rt.take ? TAKE_RATE : 0)) * dt);
   const sh = rt.sheet; let budget = dt, guard = 0;
   while (budget > 0 && guard++ < 200) {
     const sk = sh.strokes[sh.idx];
-    if (sh.u === 0) { if (rt.queue >= 1) { rt.queue -= 1; rt.idleT = 0; } else if (rt.hq >= 1) rt.hq -= 1; else break; sh.u = 1e-6; }
+    if (sh.u === 0) { if (rt.queue >= 1) rt.queue -= 1; else if (rt.hq >= 1) rt.hq -= 1; else break; sh.u = 1e-6; }
     const dur = .22 * (.4 + .6 * Math.min(slen(sk), 2) / 2) / vigilAt(s.up.veille), need = (1 - sh.u) * dur;
     if (budget >= need) {
       budget -= need; drawStroke(ic, sk, 1); sh.idx++; sh.u = 0; strokeSound();
@@ -173,18 +190,29 @@ function tick(dt) {
     else { sh.u += budget / dur; budget = 0; }
   }
 }
+/** Intensité visuelle (0 à 1) : la présence, ou le maximum pendant la prise de main. */
+export const intensity = () => rt.take ? 1 : st().presence / 100;
+/** Présence, heures et part du dessin rapportées par une illusion terminée. */
+const presOf = d => d.presence;
 function complete() {
-  const s = st(), d = def(rt.sheet.id), gain = d.base * gainMult(), pres = (d.presence + eyePresAt(s.up.oeil)) * nightHarshness();
-  s.F += gain; s.total += gain; s.done++; if (rt.idleT < REST_DELAY) s.streak = (s.streak || 0) + 1; // la Main seule ne compte pas
+  const s = st(), d = def(rt.sheet.id), gain = d.base * gainMult(), pres = rt.take ? 0 : presOf(d);
+  s.F += gain; s.total += gain; s.done++;
   s.presence = Math.min(100, s.presence + pres);
-  s.final = Math.min(FINAL_UNITS, s.final + d.reveal);
   rt.floats.push({ text: '+' + E.fmt(gain), x: rt.m.cx, y: rt.m.cy - rt.m.S * .55, t: 0, col: '236,226,214' });
-  rt.floats.push({ text: '+' + Math.round(pres), x: rt.W - 70 * rt.dpr, y: 150 * rt.dpr, t: 0, col: '255,70,80' });
-  if (s.final >= FINAL_UNITS && !s.ended) { s.ended = true; rt.endT = .001; boom(); }
+  if (pres) rt.floats.push({ text: '+' + Math.round(pres), x: rt.W - 70 * rt.dpr, y: 150 * rt.dpr, t: 0, col: '255,70,80' });
   chord();
-  rt.reveal = { id: d.id, t: 0, dur: 3.6 };
+  rt.reveal = { id: d.id, t: 0, dur: rt.take ? REVEAL_DUR_TAKE : REVEAL_DUR };
   if (d.id === 'kanizsa') spawnEyes(1);
   if (d.id === 'hermann' || d.id === 'rubin') spawnEyes(2);
+}
+/** À 100 de présence, il prend ta main : il dessine très vite, rapporte plus et dévoile plus, puis il lâche. */
+function startTake() {
+  const s = st(); rt.take = { t: 0, dur: takeDurAt(s.up.memoire) };
+  s.presence = 100; boom(); spawnEyes(3); for (let i = 0; i < 3; i++) spawnForeign();
+}
+function endTake() {
+  const s = st(); rt.take = null; s.presence = 0; s.takes = (s.takes || 0) + 1;
+  rt.eyes = rt.eyes.slice(0, Math.max(0, rt.eyes.length - 4)); E.save();
 }
 // Les fantômes s'effacent : lentement en temps normal (demi-vie d'environ 20 s), en 2 à 3 s après un changement
 // d'illusion. L'effacement se fait par paliers pour éviter que l'arrondi 8 bits ne laisse une trace figée.
@@ -212,46 +240,39 @@ function spawnForeign() {
   rt.foreign.push({ x1: Math.cos(a) * r, y1: Math.sin(a) * r, x2: Math.cos(b) * r2, y2: Math.sin(b) * r2, t: 0, dur: .6 });
   whisper();
 }
-function startLoss() { rt.lossT = .001; boom(); }
-function resetRun() {
-  const s = st(), v = s.visions + 1, notes = [...s.notes];
-  // Il efface une partie du dessin. Tout le reste repart de zéro, coût du rituel compris
-  const final = s.ended ? s.final : s.final * (1 - LOSS_ERASE);
-  S.s2 = fresh(v, notes, final, s.ended); S.s2.calm = s.calm; note(v === 1 ? 'vision1' : 'vision2'); note('rest'); // la défaite apprend le répit
-  rt.lossT = 0; rt.eyes = []; rt.foreign = []; rt.reveal = null; rt.ritual = null; rt.queue = 0; rt.hq = 0; rt.ritualCd = 0; rt.idleT = 0;
-  gc.clearRect(0, 0, rt.W, rt.H); newSheet(); E.save();
-}
+/** Absence : la Main étrangère a continué sans toi, à moitié de son rythme (rien sans elle). La présence s'arrête juste avant 100. */
 function absence(sec) {
-  const s = st();
-  s.presence = Math.min(95, s.presence + Math.min(35, sec / 60 * 6));
-  // Il a dessiné pendant ton absence
-  s.streak = 0;
+  const s = st(), r = autoRate(); if (r <= 0) return;
+  const d = def(s.sel), n = d.gen().length, k = r * Math.min(sec, AWAY_MAX) * AWAY_SHARE / n;
+  const h = k * d.base * eyeMultAt(s.up.oeil) * (1 + STROKE_SHARE);
+  s.F += h; s.total += h; s.done += Math.floor(k);
+  s.presence = Math.max(s.presence, Math.min(99, s.presence + k * presOf(d)));
   for (let i = 0; i < 5; i++) spawnForeign();
-  spawnEyes(2); note('absence'); rt.absence = 4.5;
+  spawnEyes(2); note('absence');
+  rt.away = { h }; rt.absence = 5;
 }
 
 /* ======================= Actions ======================= */
 export function click() {
   audioInit();
-  const s = st(); if (rt.lossT > 0) return;
-  if (s.presence >= 75 && !s.calm && Math.random() < .3) { spawnForeign(); return; } // ta main dévie
-  rt.queue = Math.min(30, rt.queue + 1); rt.idleT = 0;
+  rt.queue = Math.min(30, rt.queue + 1);
 }
 export function buyUp(id) {
   const s = st(), u = UP2.find(x => x.id === id), c = up2Cost(u); if (s.F < c) return;
   s.F -= c; s.up[id]++; chord(true); E.save();
+}
+/** Dévoiler le morceau suivant du dessin. Le dernier termine la nuit. */
+export function buyPiece() {
+  const s = st(), c = pieceCost(); if (s.pieces >= PIECES || s.F < c) return;
+  s.F -= c; s.pieces++; chord();
+  if (s.pieces >= PIECES && !s.ended) { s.ended = true; rt.endT = .001; boom(); }
+  E.save();
 }
 export function pickIllusion(id) {
   const s = st(), d = def(id);
   if (!s.unl[id]) { if (s.F < d.cost) return; s.F -= d.cost; s.unl[id] = 1; chord(true); }
   if (s.sel !== id) rt.ghostClearT = 2.5; // les formes précédentes s'effacent petit à petit
   s.sel = id; if (rt.sheet && rt.sheet.idx === 0 && !rt.reveal) newSheet(); E.save();
-}
-export function ritual() {
-  const s = st(), c = ritualCost(); if (s.F < c || rt.ritual || rt.lossT > 0 || rt.ritualCd > 0) return;
-  s.F -= c; s.rituals++; note('star'); rt.ritualCd = RITUAL_COOLDOWN;
-  const strokes = PATTERN_GEN.star(0, 0, 0);
-  rt.ritual = { strokes, idx: 0, acc: 0, fade: 0, rate: RITUAL_CALM / (strokes.length / 14 + 1) }; // −30 de présence sur toute la durée
 }
 export function stayAfterEnd() { rt.endShown = true; rt.endT = 0; }
 export function toggleCalm() { st().calm = !st().calm; E.save(); }
@@ -261,7 +282,7 @@ export function devFascination() { st().F += 1000; }
 /* ======================= Rendu ======================= */
 function render() {
   const g = rt.g, s = st(), W = rt.W, H = rt.H, m = rt.m; if (!g) return;
-  const calm = s.calm, p = s.presence / 100;
+  const calm = s.calm, p = intensity();
   g.setTransform(1, 0, 0, 1, 0, 0);
   const bg = g.createRadialGradient(m.cx, m.cy, 0, m.cx, m.cy, Math.max(W, H) * .7);
   bg.addColorStop(0, `hsl(${(hue() + 140) % 360},60%,${6 + p * 4}%)`); bg.addColorStop(1, '#030305');
@@ -279,7 +300,7 @@ function render() {
   if (!calm && p > .6) { const k = 1 + .007 * Math.sin(rt.t * 1.3) * (p - .6) / .4; g.translate(m.cx, m.cy); g.scale(k, k); g.translate(-m.cx, -m.cy); }
   // Le dessin final, révélé derrière tout le reste
   {
-    const n = Math.floor(finalPct() / 100 * FINAL.length), fm = { cx: rt.m.cx, cy: rt.m.cy, S: Math.min(W, H) * 1.05, lw: rt.m.lw * 1.4 }, done = s.ended;
+    const n = Math.floor(rt.shown || 0), fm = { cx: rt.m.cx, cy: rt.m.cy, S: Math.min(W, H) * 1.05, lw: rt.m.lw * 1.4 }, done = s.ended;
     g.save(); g.strokeStyle = done ? 'rgba(200,25,40,.55)' : 'rgba(150,20,30,.32)'; g.lineWidth = fm.lw; g.lineCap = 'round';
     for (let i = 0; i < n; i++) { E.strokePath(g, FINAL[i], 1, fm); g.stroke(); }
     if (done) { const [px, py] = lookAt(fm.cx, fm.cy - .04 * fm.S, fm.S * .2); g.fillStyle = 'rgba(0,0,0,.9)'; g.beginPath(); g.arc(px, py, fm.S * .06, 0, TAU); g.fill(); }
@@ -291,7 +312,6 @@ function render() {
     g.drawImage(ink, 0, 0);
     const sh = rt.sheet; if (sh && sh.u > 0) drawStroke(g, sh.strokes[sh.idx], sh.u);
   }
-  if (rt.ritual) { const r = rt.ritual; g.save(); g.globalAlpha = Math.max(0, 1 - r.fade); g.strokeStyle = 'rgba(200,200,190,.85)'; g.lineWidth = m.lw; for (let i = 0; i < r.idx; i++) { E.strokePath(g, r.strokes[i], 1, { ...m, S: m.S * .55 }); g.stroke(); } g.restore(); }
   for (const f of rt.foreign) { const u = Math.min(1, f.t / f.dur); g.save(); g.strokeStyle = 'rgba(230,30,40,.85)'; g.lineWidth = m.lw * 1.1; g.shadowColor = 'rgba(255,0,0,.8)'; g.shadowBlur = 6 * rt.dpr; g.beginPath(); g.moveTo(X(f.x1), Y(f.y1)); g.lineTo(X(f.x1 + (f.x2 - f.x1) * u), Y(f.y1 + (f.y2 - f.y1) * u)); g.stroke(); g.restore(); }
   g.restore();
   for (const e of rt.eyes) drawEye(g, e.x, e.y, e.r, calm ? 1 : (e.blink < 0 ? 0 : Math.min(1, (rt.t - e.born) * 1.5)), 'rgba(170,20,30,.95)');
@@ -306,7 +326,6 @@ function render() {
   g.fillStyle = `rgba(${Math.round(200 + 55 * p)},${Math.round(200 - 150 * p)},${Math.round(190 - 150 * p)},.9)`; g.fillText(`${Math.round(s.presence)} / 100`, W - 70 * rt.dpr, 118 * rt.dpr);
   for (const f of rt.floats) { g.font = `${Math.round((f.small ? 20 : 26) * rt.dpr)}px 'Caveat', 'Architects Daughter', cursive`; g.fillStyle = `rgba(${f.col},${Math.max(0, 1 - f.t / 1.6)})`; g.fillText(f.text, f.x, f.y - f.t * 30 * rt.dpr); }
   g.restore();
-  if (rt.lossT > 0) { g.fillStyle = `rgba(0,0,0,${Math.min(.85, rt.lossT / 2)})`; g.fillRect(0, 0, W, H); }
 }
 function lookAt(x, y, r) { const dx = rt.mouse[0] * rt.dpr - x, dy = rt.mouse[1] * rt.dpr - y, d = Math.hypot(dx, dy) || 1, k = Math.min(r * .35, d * .05); return [x + dx / d * k, y + dy / d * k]; }
 function drawEye(g, x, y, r, open, iris, meter = false) {
@@ -384,7 +403,7 @@ function audioInit() {
 }
 function stopAudio() { if (AC) { AC.close(); AC = null; } }
 function updateAudio() {
-  if (!AC) return; const p = st().presence / 100, tt = AC.currentTime;
+  if (!AC) return; const p = intensity(), tt = AC.currentTime;
   master.gain.setTargetAtTime(S.muted ? 0 : .9 * S.vol.fx, tt, .1);
   droneG.gain.setTargetAtTime(.05 + .16 * p, tt, .3);
   const b = Math.pow(.5 + .5 * Math.sin(rt.t * TAU * .22), 2);
@@ -414,19 +433,18 @@ function boom() {
 
 /* ======================= Entrée et sortie ======================= */
 export function enterStage2() {
-  E.payFascination(); S.stage = 2; S.s2 = fresh(0, ['enter']);
+  E.payFascination(); S.stage = 2; S.s2 = fresh(['enter']);
   E.setFrenzy(false); E.save();
 }
 /** Outil de test : revenir à l'étape 1 (recharge la page). */
 export function leaveStage2Dev() { S.stage = 1; S.s2 = null; S.fascForce = 0; E.save(); location.reload(); }
 
-/** Ce qu'une illusion rapporte en tout (traits + fin), la présence qu'elle ajoute et sa part du dessin final. */
+/** Ce qu'une illusion rapporte en tout (traits + fin) et la présence qu'elle ajoute. */
 export function illusionProfile(id) {
   const d = def(id);
-  return { hours: d.base * gainMult() * (1 + STROKE_SHARE), end: d.base * gainMult(), pres: (d.presence + eyePresAt(st().up.oeil)) * nightHarshness(), reveal: d.reveal / FINAL_UNITS * 100 };
+  return { hours: d.base * gainMult() * (1 + STROKE_SHARE), end: d.base * gainMult(), pres: rt.take ? 0 : presOf(d) };
 }
-export const ritualSeconds = () => Math.round(PATTERN_GEN.star(0, 0, 0).length / 14 + 1);
 
 /* ======================= Outil de test : simulation accélérée ======================= */
 /** Avance la simulation sans dessiner à l'écran (playtests automatiques). */
-export function devStep(dt) { if (!rt.m) { rt.W = 1440; rt.H = 900; rt.dpr = 1; rt.m = { cx: 720, cy: 450, S: 594, lw: 1.4 }; ink.width = 1440; ink.height = 900; ghost.width = 1440; ghost.height = 900; } if (!rt.sheet) newSheet(); tick(dt); }
+export function devStep(dt) { if (!rt.m) { normalizeS2(); rt.W = 1440; rt.H = 900; rt.dpr = 1; rt.m = { cx: 720, cy: 450, S: 594, lw: 1.4 }; ink.width = 1440; ink.height = 900; ghost.width = 1440; ghost.height = 900; } if (!rt.sheet) newSheet(); tick(dt); }

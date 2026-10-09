@@ -34,7 +34,7 @@ const MILESTONES: [string, () => boolean][] = [
   ['folioscope', () => !!E.S.folioOpen],
   ['premier-film', () => (E.S.films || 0) >= 1],
   ['fascination', () => E.S.stage === 2],
-  ['etape2-defaite', () => !!E.S.s2 && E.S.s2.visions >= 1],
+  ['etape2-prise', () => !!E.S.s2 && E.S.s2.takes >= 1],
   ['etape2-dessin-fini', () => !!E.S.s2 && E.S.s2.ended],
 ];
 

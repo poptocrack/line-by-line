@@ -83,19 +83,18 @@ function moire() {
   return out;
 }
 
-/** reveal : part du dessin final dévoilée par chaque illusion terminée (FINAL_UNITS au total). */
-export const ILLUSIONS: { id: IllusionId; base: number; cost: number; gen: () => any[]; presence: number; reveal: number }[] = [
-  { id: 'necker', base: 10, cost: 0, gen: necker, presence: 5, reveal: 1 },
-  { id: 'kanizsa', base: 30, cost: 60, gen: kanizsa, presence: 7, reveal: 2 },
-  { id: 'hermann', base: 80, cost: 250, gen: hermann, presence: 9, reveal: 3 },
-  { id: 'fraser', base: 200, cost: 900, gen: fraser, presence: 10, reveal: 4 },
-  { id: 'rubin', base: 500, cost: 3000, gen: rubin, presence: 12, reveal: 5 },
-  { id: 'moire', base: 1200, cost: 9000, gen: moire, presence: 14, reveal: 6 },
+/** base : heures rapportées par une illusion terminée ; presence : ce qu'elle ajoute à la jauge. */
+export const ILLUSIONS: { id: IllusionId; base: number; cost: number; gen: () => any[]; presence: number }[] = [
+  { id: 'necker', base: 10, cost: 0, gen: necker, presence: 5 },
+  { id: 'kanizsa', base: 30, cost: 60, gen: kanizsa, presence: 7 },
+  { id: 'hermann', base: 80, cost: 250, gen: hermann, presence: 9 },
+  { id: 'fraser', base: 200, cost: 900, gen: fraser, presence: 10 },
+  { id: 'rubin', base: 500, cost: 3000, gen: rubin, presence: 12 },
+  { id: 'moire', base: 1200, cost: 9000, gen: moire, presence: 14 },
 ];
 
 /* ---------------- Le dessin final : le visage de ce qui regarde ---------------- */
 // Révélé morceau par morceau derrière les illusions, des contours extérieurs vers l'œil central.
-export const FINAL_UNITS = 230; // environ 15 minutes de jeu actif jusqu'à la fin (mesuré par simulation)
 function ellipsePts(cx, cy, rx, ry, n = 48, a0 = 0, a1 = TAU) { const o = []; for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; o.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]); } return o; }
 function eye(out, cx, cy, w, rays) {
   const lid = (s) => { const o = []; for (let i = 0; i <= 24; i++) { const x = -1 + i / 12; o.push([cx + x * w, cy + s * (1 - x * x) * w * .55]); } return o; };

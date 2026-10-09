@@ -22,7 +22,7 @@ Jeu incrémental de dessins géométriques au porte-mine. React 18 + TypeScript,
 
 Statistiques envoyées (sans cookies, aucune donnée personnelle) : une visite, nouvelle partie ou retour, puis chaque
 étape atteinte une fois par nuit (premier dessin, motifs débloqués, carnets 1 et 5, folioscope, premier film,
-Fascination, défaite et dessin final en étape 2), avec une tranche de temps de jeu (`etape/nuit-1/carnet-1/5-15min`).
+Fascination, première prise de main et dessin final en étape 2), avec une tranche de temps de jeu (`etape/nuit-1/carnet-1/5-15min`).
 Rien n'est envoyé sans `GOATCOUNTER_CODE`, si le navigateur demande « Do Not Track », ou si le joueur coupe les
 statistiques dans les Réglages. Code : `src/analytics.ts`.
 
@@ -95,13 +95,14 @@ Améliorations (`UPGRADES`) : sans niveau max (sauf le Projecteur), coût du niv
 - Déclencheur : l'amélioration « Fascination » apparaît après 10 films et au moins un carnet fermé (`fascVisible` dans `game.ts`). Elle coûte `FASC_PAGES` pages (1000, `src/engine/data.ts`), payées à l'entrée de l'étape 2, explique qu'on ne revient pas en arrière et prévient avant de basculer.
 - La bascule (`App.tsx` + styles `.bascule`) : le crayon s'emballe (`setFrenzy`), l'interface tombe, le tapis se tord, puis le noir.
 - `src/stage2/illusions.ts` : les illusions (Necker, Kanizsa, Hermann, Fraser, Rubin, moiré), valeurs et coûts.
-- `src/stage2/stage2.ts` : fascination, présence, intrusions, rituels, absence, révélations, yeux, son et rendu. État sauvegardé dans `S.s2`.
+- `src/stage2/stage2.ts` : heures, présence, prise de main, intrusions, absence, révélations, yeux, son et rendu. État sauvegardé dans `S.s2`.
 - `src/ui/Stage2.tsx` : l'interface écrite dans les marges.
-- La boucle : terminer le dessin final propose « Fermer le carnet » (`newCycle` dans `game.ts`). Le carnet se ferme comme à l'étape 1 (ses pages sont gagnées, voir `nextSketchbook`), avec en plus revenus ×2 par nuit traversée (×2, ×4, ×8…) et un trophée. Pages, techniques, folioscope et films sont conservés. L'étape 2 suivante est plus dure (+25 % de présence par nuit).
-- Transe : chaque illusion terminée sans s'arrêter ajoute +25 % de gains (jusqu'à ×3, `TRANCE_STEP`, `TRANCE_MAX`). Le répit (3 s sans tracer soi-même) fait redescendre la présence mais remet la transe à zéro. Le rituel apaise sans casser la transe.
-- Main étrangère : ses traits passent par une file à part (`rt.hq`) et ne comptent pas comme les tiens. Elle continue pendant le répit, qui reste possible, mais ses illusions ne font pas monter la transe.
-- Défaite : 15 % du dessin révélé est effacé, tout le reste de la nuit repart de zéro, coût du rituel compris.
-- Outils de test : « Montrer Fascination (+ pages) » dans le panneau de test (donne les pages manquantes) ; en étape 2 avec `#dev` : +20 présence, +1000 fascination, retour à l'étape 1.
+- Pas de défaite : la présence monte avec les illusions finies et la Main étrangère, et sert de multiplicateur (proximité ×1 à ×3). À 100, « il prend ta main » (`startTake`) : pendant `TAKE_DUR` s (+2 s par niveau de Mémoire, 30 s au plus), il trace `TAKE_RATE` traits/s en plus et les heures sont multipliées (`takeMultAt`, en plus de la proximité). Puis la présence retombe à zéro.
+- Le dessin final : 10 morceaux (`PIECES`) achetés avec les heures, chacun `PIECE_GR` fois plus cher que le précédent (`pieceCost`). Le dernier termine la nuit. Environ 12 min en jouant, 16 min en laissant la Main étrangère jouer seule (mesuré avec `tools-sim-etape2.py`).
+- Marques : Main étrangère (automatisation, continue pendant l'absence à 50 % de son rythme), Œil ouvert (heures), Veille (vitesse), Mémoire (prise de main plus longue et plus forte). Toutes aident, aucune n'a de contrepartie.
+- La boucle : terminer le dessin final propose « Fermer le carnet » (`newCycle` dans `game.ts`). Le carnet se ferme comme à l'étape 1 (ses pages sont gagnées, voir `nextSketchbook`), avec en plus revenus ×3 par nuit traversée (`NIGHT_MULT`, ×3, ×9, ×27…) et un trophée. Pages, techniques, folioscope et films sont conservés. Pendant la nuit, la galerie et les trophées continuent de rapporter (ce graphite compte pour les pages du carnet).
+- Nuits suivantes plus courtes : la Main étrangère commence au niveau 2 × nuits traversées (`startHand`, 10 au plus) et le dessin coûte deux fois moins par nuit traversée (`pieceDiscount`).
+- Outils de test : « Montrer Fascination (+ pages) » dans le panneau de test (donne les pages manquantes) ; en étape 2 avec `#dev` : +20 présence, +1000 heures, retour à l'étape 1.
 
 ## Ajouter une langue
 
