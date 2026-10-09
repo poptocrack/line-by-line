@@ -184,7 +184,7 @@ const G = { W: 0, H: 0, S: 1, cx: 0, cy: 0, dpr: 1, lw: 1 };
 let glowLife = 0, glowBudget = 0, onionT = 0, proj = null, onionCache = null, nailCache = null;
 const easels = []; // chevalets supplémentaires (voir plus bas)
 let sheet = null, queue = 0, lastHead = [0.4, 0.75], curK = 0, swapT = 0;
-let autoAcc = 0, drawingNow = false, holding = false, holdT = 0, rateAcc = D(0), rate = D(0), rateT = 0, saveT = 0, uiT = 0;
+let autoAcc = 0, drawingNow = false, rateAcc = D(0), rate = D(0), rateT = 0, saveT = 0, uiT = 0;
 export const getSheet = () => sheet;
 export const getProj = () => proj;
 export const getSwapT = () => swapT;
@@ -493,7 +493,6 @@ function step(dt) {
   autoAcc += autoClicks() * dt;
   while (autoAcc >= 1) { autoAcc -= 1; queue = Math.min(qcap(), queue + perClick()); }
   if (isM) queue = Math.min(qcap() + 8, queue + machineRate() * dt);
-  if (holding) { holdT += dt; if (holdT >= .3) { holdT -= .14; addClicks(); } }
   drawingNow = false;
   if (swapT > 0) { swapT -= dt; if (swapT <= 0) { swapT = 0; newSheet(); } return; }
   let budget = dt, guard = 0; glowBudget = 14;
@@ -682,9 +681,9 @@ function tickFrame(now) {
 export function attachSheet(el) {
   sheetEl = el; sc = el.getContext('2d'); el.style.background = PAPER.bg;
   new ResizeObserver(resize).observe(el); resize();
-  el.addEventListener('pointerdown', e => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (_) { } addClicks(); holding = true; holdT = 0; });
-  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => el.addEventListener(ev, () => { holding = false; }));
-  el.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); addClicks(); } });
+  // Un clic = un trait : maintenir le bouton enfoncé ne dessine rien de plus.
+  el.addEventListener('pointerdown', e => { e.preventDefault(); addClicks(); });
+  el.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!e.repeat) addClicks(); } });
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 export function attachPencil(el) { pc = el; pg = el.getContext('2d'); sizePencil(); addEventListener('resize', sizePencil); }
